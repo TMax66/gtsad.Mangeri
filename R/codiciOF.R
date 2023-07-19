@@ -1,26 +1,36 @@
 dt <- read_excel("dati/df.xlsx")
+dtlett <- read_excel("dati/datiletteratura.xlsx")
+
+
+
 
 library(binom)
 library(forestplot)
 
 df <- dt %>% 
   mutate(category = casefold(category), 
-         category = factor(category, levels = c("oysters", "mussels", "clams", "other"))) %>% 
+         category = factor(category, levels = c("oysters", "mussels", "clams", "other")), 
+         season = factor(season)) %>% 
 
   group_by(period, season, category, Nov) %>% 
   count() %>%  na.omit() %>% 
   pivot_wider(names_from = "Nov", values_from = "n", values_fill = 0) %>% 
-  mutate(tested = neg+pos) %>% 
+  mutate(tested = neg+pos, 
+         '%pos' = round(100*(pos/tested), 1)) %>% 
+  select(-neg) %>% 
 arrange(category)
 #adorn_totals()
+
+
+
 
 
 prev <- binom.bayes(
   x = df$pos, n = df$tested,
   type = "highest", conf.level = 0.95, tol = 1e-9, 
-  prior.shape1 = 0.8, prior.shape2 = 0.3)
+  prior.shape1 = 1, prior.shape2 = 1)
 
-binom.bayes(x = 0, n = 1, prior.shape1 = 0.00001, prior.shape2 = 0.00001)
+# binom.bayes(x = 0, n = 1, prior.shape1 = 0.00001, prior.shape2 = 0.00001)
 
 prev <- cbind(df, prev[,6:8])
 
@@ -30,73 +40,147 @@ prev <- prev %>%
          limsup = upper,
          across(where(is.double), round,2))
 
+fplot <- function(data, periodo)
+{
+  data %>% ungroup() %>% 
+    filter(period == periodo) %>%  
+    #mutate(Prevalence = sprintf("%.2f", mean), .after = tested) %>% 
+    mutate(CI = paste0("[",sprintf("%.2f", lower),", ", sprintf("%.2f", upper), "]")) %>%   
+    
+    forestplot(labeltext = c(  season, category,pos,
+                               tested,  Prevalence, CI),
+               graph.pos = 5,
+               clip = c(0,1),
+               boxsize = 0.2,
+               ci.vertices = TRUE,
+               ci.vertices.height = 0.05,
+               xlab= expression(bold("Estimated prevalence with 95% CI")),
+               title = paste("Bayesian Beta-binomial estimated posterior prevalence  of \n NoroVirus in shellfish sampling during", periodo, "period"),
+               xlog = FALSE, 
+               align = "llrrrc",
+               colgap = unit(4, "mm"),
+               
+               # xticks = xticks,
+               txt_gp = fpTxtGp(ticks=gpar(cex=1), 
+                                xlab = gpar(cex=1))) %>% 
+    fp_add_header(season = "Season", 
+                  category = "Category",
+                  pos = "No.positive", 
+                  tested = "No.tested", 
+                  Prevalence = "Prevalence",
+                  CI = "95% CI" ) %>% 
+    
+    fp_add_lines(h_1 = gpar(lty = 1),
+                 h_2 = gpar(lty = 1))
+  
+}
 
-library(forestplot)
+
+p1 <- fplot(prev, periodo = "cold1819")
+
+p2 <- fplot(prev, periodo = "cold1920")
+
+p3 <- fplot(prev, periodo = "mild19")
+
+p4 <- fplot(prev, periodo = "mild20")
+
+
+library(ggplotify)
+library(patchwork)
+ 
+
+p1 <- grid2grob(print(p1)) 
+
+p2 <- grid2grob(print(p2))
+
+p3 <- grid2grob(print(p3))
+
+p4 <- grid2grob(print(p4))
+
+wrap_elements(p1)/wrap_elements(p2)
+
+wrap_elements(p3)/wrap_elements(p4)
+
+
+
+# dati letteratura----
+
+df <- dtlett %>% 
+  rename(tested = totcampioni, pos = npositivi)
+
+prev <- prev <- binom.bayes(
+  x = df$pos, n = df$tested,
+  type = "highest", conf.level = 0.95, tol = 1e-9)#, 
+#  prior.shape1 = 1, prior.shape2 = 1)
+
+prev <- cbind(df, prev[,6:8])
+
+prev <- prev %>% 
+  mutate(
+         mean = mean,
+         lower = lower,
+         upper = upper,
+         across(where(is.double), round, 2))
+
+
 prev %>% ungroup() %>% 
-  #mutate(Prevalence = sprintf("%.2f", mean), .after = tested) %>% 
-  mutate(CI = paste0("[",sprintf("%.2f", lower),", ", sprintf("%.2f", upper), "]")) %>%  
-  forestplot(labeltext = c( period, season, category,pos,
-                            tested,  Prevalence, CI),
+  mutate(CI = paste0("[",sprintf("%.2f", lower),", ", sprintf("%.2f", upper), "]")) %>%    
+  
+  forestplot(labeltext = c(studio, anno, country, category, pos,
+                             tested,  prevalence, CI),
+             graph.pos = 7,
              clip = c(0,1),
              boxsize = 0.2,
+             xticks=c(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100),
              ci.vertices = TRUE,
              ci.vertices.height = 0.05,
              xlab= expression(bold("Estimated prevalence with 95% CI")),
-             title = "Bayesian posterior estimated prevalence ( with 95% credibility interval) of NoroVirus",
+             title = "Bayesian Beta-binomial estimated posterior prevalence  of \n NoroVirus in shellfish sampling from different Study",
              xlog = FALSE, 
              align = "llrrrc",
              colgap = unit(4, "mm"),
-             # xticks = xticks,
              txt_gp = fpTxtGp(ticks=gpar(cex=1), 
                               xlab = gpar(cex=1))) %>% 
-  fp_add_header(period  = "Year of Sampling",
-                season = "Season of Sampling",
-                category = "Species",
+  fp_add_header(studio = "Study", 
+                anno = "Year",
+                country = "Country", 
+                category = "Category", 
                 pos = "No.positive", 
                 tested = "No.tested", 
-                Prevalence = "Prevalence",
+                prevalence = "Prevalence",
                 CI = "95% CI" ) %>% 
   
   fp_add_lines(h_1 = gpar(lty = 1),
-               h_2 = gpar(lty = 1),
-               h_9 = gpar(lty = 1)) %>%
-  fp_set_zebra_style("#EFEFEF")
+               h_2 = gpar(lty = 1), 
+               h_12 = gpar(lty = 1)) %>% 
   
-  fp_append_row(mean  = 0.39,
-                lower = 0.33,
-                upper = 0.45,
-                anno = expression(bold("Overall Prevalence")),
-                Pos = expression(bold("82")),
-                tested = expression(bold("209")),
-                Prevalence = expression(bold("0.39")),
-                CI = expression(bold("[0.33, 0.45]")),
+  fp_append_row(mean  = 15.00,
+                lower = 12.00,
+                upper = 17.00,
+                studio = expression(bold("Our Study")),
+                anno = expression(bold("2018-2022")),
+                country = expression(bold("Italy")),
+                category = expression(bold("shellfish")),
+                pos = expression(bold("126")),
+                tested = expression(bold("861")),
+                prevalence = expression(bold("15.00")),
+                CI = expression(bold("[12.00, 17.00]")),
                 position = "last",
                 is.summary = FALSE) %>% 
-  
-  
-  
-  fp_set_style(box = c(rep("black", 5), "royalblue"))
+  fp_set_style(box = c(rep("black", 11), "royalblue"))
 
 
 
 
 
 
+dt %>% 
+  group_by(Nov) %>% 
+  count() %>% 
+  pivot_wider(names_from = Nov, values_from = n)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+binom.bayes(x = 126, n = 861)
 
 
 
