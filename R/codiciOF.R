@@ -28,7 +28,7 @@ arrange(category)
 prev <- binom.bayes(
   x = df$pos, n = df$tested,
   type = "highest", conf.level = 0.95, tol = 1e-9, 
-  prior.shape1 = 1, prior.shape2 = 1)
+  prior.shape1 = 0.5, prior.shape2 = 0.5)
 
 # binom.bayes(x = 0, n = 1, prior.shape1 = 0.00001, prior.shape2 = 0.00001)
 
@@ -54,20 +54,24 @@ fplot <- function(data, periodo)
                boxsize = 0.2,
                ci.vertices = TRUE,
                ci.vertices.height = 0.05,
-               xlab= expression(bold("Estimated prevalence with 95% CI")),
-               title = paste("Bayesian Beta-binomial estimated posterior prevalence  of \n NoroVirus in shellfish sampling during", periodo, "period"),
+               xlab= expression(pi),
+               title = paste0("Sampling during period ", periodo),
+               
                xlog = FALSE, 
                align = "llrrrc",
                colgap = unit(4, "mm"),
                
-               # xticks = xticks,
-               txt_gp = fpTxtGp(ticks=gpar(cex=1), 
-                                xlab = gpar(cex=1))) %>% 
+               txt_gp = fpTxtGp(ticks=gpar(cex=0.7), 
+                                xlab = gpar(cex=1.5, fontface = "bold"), 
+                                title = gpar(cex=1.3), 
+                                label = gpar(cex = 1)
+                                )) %>% 
+    
     fp_add_header(season = "Season", 
                   category = "Category",
                   pos = "No.positive", 
                   tested = "No.tested", 
-                  Prevalence = "Prevalence",
+                  Prevalence = expression(pi),
                   CI = "95% CI" ) %>% 
     
     fp_add_lines(h_1 = gpar(lty = 1),
@@ -97,21 +101,45 @@ p3 <- grid2grob(print(p3))
 
 p4 <- grid2grob(print(p4))
 
-wrap_elements(p1)/wrap_elements(p2)
+wrap_elements(p1)/wrap_elements(p2)+ plot_annotation(
+  caption = "Bayesian posterior estimation (with 95% credible interval) 
+  of the  probability for a shellfish sample to be positive for NoV during two cold season"
+) & theme(
+  plot.caption = element_text(size = 12, color = "blue")
+)
 
-wrap_elements(p3)/wrap_elements(p4)
+wrap_elements(p3)/wrap_elements(p4) + plot_annotation(
+  caption = "Bayesian posterior estimation (with 95% credible interval) 
+  of the  probability for a shellfish sample to be positive for NoV during two mild season"
+) & theme(
+  plot.caption = element_text(size = 12, color = "blue")
+)
 
 
 
 # dati letteratura----
 
 df <- dtlett %>% 
-  rename(tested = totcampioni, pos = npositivi)
+  rename(tested = totcampioni, pos = npositivi) %>% 
+  select(-prevalence)
 
-prev <- prev <- binom.bayes(
+
+#prior model
+
+# df %>% #filter(country == "Italy") %>% 
+#   # summarise(tested = sum(tested), 
+#   #         pos = sum(pos))
+# mutate(prev = pos/tested) %>% 
+# ggplot()+
+#   aes(x = prev)+
+#   geom_bar()
+
+
+prev <- binom.bayes(
   x = df$pos, n = df$tested,
-  type = "highest", conf.level = 0.95, tol = 1e-9)#, 
-#  prior.shape1 = 1, prior.shape2 = 1)
+  type = "highest", conf.level = 0.95, tol = 1e-9, 
+ prior.shape1 = 0.5, prior.shape2 = 0.5)
+
 
 prev <- cbind(df, prev[,6:8])
 
@@ -120,51 +148,56 @@ prev <- prev %>%
          mean = mean,
          lower = lower,
          upper = upper,
-         across(where(is.double), round, 2))
+         across(where(is.double), round, 2), 
+         p = mean)
 
 
-prev %>% ungroup() %>% 
+
+pp <- prev %>% ungroup() %>% 
   mutate(CI = paste0("[",sprintf("%.2f", lower),", ", sprintf("%.2f", upper), "]")) %>%    
   
   forestplot(labeltext = c(studio, anno, country, category, pos,
-                             tested,  prevalence, CI),
+                             tested,  p, mean,  CI),
              graph.pos = 7,
              clip = c(0,1),
              boxsize = 0.2,
-             xticks=c(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100),
+             xticks=c(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100)/100,
              ci.vertices = TRUE,
              ci.vertices.height = 0.05,
-             xlab= expression(bold("Estimated prevalence with 95% CI")),
-             title = "Bayesian Beta-binomial estimated posterior prevalence  of \n NoroVirus in shellfish sampling from different Study",
+             xlab= expression(pi),
+             #title = "Bayesian posterior estimation (with 95% credible interval) of the  probability for a shellfish sample to be positive for NoV in different studies",
              xlog = FALSE, 
              align = "llrrrc",
              colgap = unit(4, "mm"),
-             txt_gp = fpTxtGp(ticks=gpar(cex=1), 
-                              xlab = gpar(cex=1))) %>% 
+             txt_gp = fpTxtGp(ticks=gpar(cex=0.7), 
+                              xlab = gpar(cex=1.5, fontface = "bold"), 
+                              title = gpar(cex=1.3), 
+                              label = gpar(cex = 1)
+             ))  %>% 
   fp_add_header(studio = "Study", 
                 anno = "Year",
                 country = "Country", 
                 category = "Category", 
                 pos = "No.positive", 
                 tested = "No.tested", 
-                prevalence = "Prevalence",
+                p = expression(pi),
                 CI = "95% CI" ) %>% 
   
   fp_add_lines(h_1 = gpar(lty = 1),
                h_2 = gpar(lty = 1), 
                h_12 = gpar(lty = 1)) %>% 
   
-  fp_append_row(mean  = 15.00,
-                lower = 12.00,
-                upper = 17.00,
+  fp_append_row(mean  = 0.15,
+                lower = 0.12,
+                upper = 0.17,
                 studio = expression(bold("Our Study")),
                 anno = expression(bold("2018-2022")),
                 country = expression(bold("Italy")),
                 category = expression(bold("shellfish")),
                 pos = expression(bold("126")),
                 tested = expression(bold("861")),
-                prevalence = expression(bold("15.00")),
-                CI = expression(bold("[12.00, 17.00]")),
+                p = expression(bold("0.15")),
+                CI = expression(bold("[0.12, 0.17]")),
                 position = "last",
                 is.summary = FALSE) %>% 
   fp_set_style(box = c(rep("black", 11), "royalblue"))
@@ -172,9 +205,16 @@ prev %>% ungroup() %>%
 
 
 
+pp<- grid2grob(print(pp))
 
+wrap_elements(pp)+ plot_annotation(caption = "Bayesian posterior estimation (with 95% credible interval) of the  probability for a shellfish sample
+        to be positive for NoV in different studies") &
+  theme(
+    plot.caption = element_text(size = 12, color = "blue")
+  )
+  
 
-dt %>% 
+plodt %>% 
   group_by(Nov) %>% 
   count() %>% 
   pivot_wider(names_from = Nov, values_from = n)
